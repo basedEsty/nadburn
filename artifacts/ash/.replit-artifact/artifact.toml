@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Ash — Token Burner"
+version = "1.0.0"
+id = "artifacts/ash"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24228
+
+[services.development]
+run = "pnpm --filter @workspace/ash run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ash", "run", "build" ]
+publicDir = "artifacts/ash/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24228"
+BASE_PATH = "/"
