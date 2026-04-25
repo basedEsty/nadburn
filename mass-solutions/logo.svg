@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- White background -->
+  <rect width="200" height="200" fill="#ffffff"/>
+
+  <!-- Bold M -->
+  <text
+    x="100"
+    y="140"
+    font-family="Arial Black, Arial, sans-serif"
+    font-weight="900"
+    font-size="140"
+    text-anchor="middle"
+    fill="#0a0a0a"
+    letter-spacing="-4"
+  >M</text>
+
+  <!-- Horizontal slash through middle of M -->
+  <rect x="18" y="92" width="164" height="14" fill="#ffffff" rx="2"/>
+
+  <!-- Slash lines (thin dark lines bordering the cut) -->
+  <rect x="18" y="92" width="164" height="3" fill="#0a0a0a" rx="1"/>
+  <rect x="18" y="103" width="164" height="3" fill="#0a0a0a" rx="1"/>
+</svg>
