@@ -874,20 +874,18 @@ export default function BurnerApp() {
             });
             updateStep(burnId, { status: "success", detail: `Tx: ${hash.slice(0, 14)}…` });
             burned += 1;
-            if (isAuthenticated) {
-              api
-                .recordBurn({
-                  chainId,
-                  tokenAddress: "native",
-                  tokenSymbol: token.symbol,
-                  tokenDecimals: token.decimals,
-                  amount: amt.toString(),
-                  mode: "burn",
-                  txHash: hash,
-                  recoveredNative: null,
-                })
-                .catch(() => undefined);
-            }
+            api
+              .recordBurn({
+                chainId,
+                tokenAddress: "native",
+                tokenSymbol: token.symbol,
+                tokenDecimals: token.decimals,
+                amount: amt.toString(),
+                mode: "burn",
+                txHash: hash,
+                recoveredNative: null,
+              })
+              .catch(() => undefined);
           } else if (wantsRecover && recoveryMode === "trading-api") {
             // V4 / Trading API path. Same UX as V2 (approve + swap), but the
             // approve target and swap calldata both come from Uniswap's API
@@ -1004,20 +1002,18 @@ export default function BurnerApp() {
                 burned += 1;
                 // Record the fallback burn server-side so it shows up in
                 // history alongside the user's other burns.
-                if (isAuthenticated) {
-                  api
-                    .recordBurn({
-                      chainId,
-                      tokenAddress: token.address,
-                      tokenSymbol: token.symbol,
-                      tokenDecimals: token.decimals,
-                      amount: amt.toString(),
-                      mode: "burn",
-                      txHash: burnHash,
-                      recoveredNative: null,
-                    })
-                    .catch(() => undefined);
-                }
+                api
+                  .recordBurn({
+                    chainId,
+                    tokenAddress: token.address,
+                    tokenSymbol: token.symbol,
+                    tokenDecimals: token.decimals,
+                    amount: amt.toString(),
+                    mode: "burn",
+                    txHash: burnHash,
+                    recoveredNative: null,
+                  })
+                  .catch(() => undefined);
               } catch {
                 failed += 1;
               }
@@ -1037,20 +1033,18 @@ export default function BurnerApp() {
                 txHash: swapHash,
               });
               recovered += 1;
-              if (isAuthenticated) {
-                api
-                  .recordBurn({
-                    chainId,
-                    tokenAddress: token.address,
-                    tokenSymbol: token.symbol,
-                    tokenDecimals: token.decimals,
-                    amount: amt.toString(),
-                    mode: "recover",
-                    txHash: swapHash,
-                    recoveredNative: liveQuoteOut.toString(),
-                  })
-                  .catch(() => undefined);
-              }
+              api
+                .recordBurn({
+                  chainId,
+                  tokenAddress: token.address,
+                  tokenSymbol: token.symbol,
+                  tokenDecimals: token.decimals,
+                  amount: amt.toString(),
+                  mode: "recover",
+                  txHash: swapHash,
+                  recoveredNative: liveQuoteOut.toString(),
+                })
+                .catch(() => undefined);
             } catch (err: any) {
               updateStep(swapId, {
                 status: "failed",
@@ -1145,20 +1139,18 @@ export default function BurnerApp() {
               txHash: swapHash,
             });
             recovered += 1;
-            if (isAuthenticated) {
-              api
-                .recordBurn({
-                  chainId,
-                  tokenAddress: token.address,
-                  tokenSymbol: token.symbol,
-                  tokenDecimals: token.decimals,
-                  amount: amt.toString(),
-                  mode: "recover",
-                  txHash: swapHash,
-                  recoveredNative: quote.toString(),
-                })
-                .catch(() => undefined);
-            }
+            api
+              .recordBurn({
+                chainId,
+                tokenAddress: token.address,
+                tokenSymbol: token.symbol,
+                tokenDecimals: token.decimals,
+                amount: amt.toString(),
+                mode: "recover",
+                txHash: swapHash,
+                recoveredNative: quote.toString(),
+              })
+              .catch(() => undefined);
           } else {
             const burnId = `${token.address}-burn`;
             updateStep(burnId, { status: "active" });
@@ -1170,20 +1162,18 @@ export default function BurnerApp() {
             });
             updateStep(burnId, { status: "success", detail: `Tx: ${hash.slice(0, 14)}…` });
             burned += 1;
-            if (isAuthenticated) {
-              api
-                .recordBurn({
-                  chainId,
-                  tokenAddress: token.address,
-                  tokenSymbol: token.symbol,
-                  tokenDecimals: token.decimals,
-                  amount: amt.toString(),
-                  mode: "burn",
-                  txHash: hash,
-                  recoveredNative: null,
-                })
-                .catch(() => undefined);
-            }
+            api
+              .recordBurn({
+                chainId,
+                tokenAddress: token.address,
+                tokenSymbol: token.symbol,
+                tokenDecimals: token.decimals,
+                amount: amt.toString(),
+                mode: "burn",
+                txHash: hash,
+                recoveredNative: null,
+              })
+              .catch(() => undefined);
           }
         } catch (err: any) {
           console.error(`Failed for ${token.symbol}`, err);
