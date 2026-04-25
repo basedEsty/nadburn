@@ -25,53 +25,12 @@ function levelFromXP(xp)  { let l = 0; while (l < 30 && xp >= xpForLevel(l + 1))
 function roleForLevel(lvl){ if (lvl < 1) return null; return CHESS_ROLES.find(r => lvl >= r.minLevel && lvl <= r.maxLevel) ?? null; }
 
 // ── Persistence ─────────────────────────────────────────────────
-const DATA_FILE     = './levels.json';
-const ANNOUNCE_FLAG = './announced.json';
-const SETUP_FLAG    = './channels_setup.json';
-
+const DATA_FILE = './levels.json';
 function loadData() {
   if (!existsSync(DATA_FILE)) return {};
   try { return JSON.parse(readFileSync(DATA_FILE, 'utf8')); } catch { return {}; }
 }
 function saveData(d) { writeFileSync(DATA_FILE, JSON.stringify(d, null, 2)); }
-
-// ── One-time channel setup ───────────────────────────────────────
-// • Moves #feedback under the Chat Channels category
-// • Locks #announcements, #instructions, #links:
-//     @everyone  → SendMessages = DENY
-//     bot user   → SendMessages = ALLOW  (owner has ADMIN, bypasses all overwrites)
-async function setupChannels(guild) {
-  const channels = await guild.channels.fetch();
-  const find = kw => channels.find(c => c.name.toLowerCase().includes(kw.toLowerCase()));
-
-  const feedback      = find('feedback');
-  const announcements = find('announcement');
-  const instructions  = find('instruction');
-  const links         = find('links');
-  const chatCategory  = channels.find(
-    c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('chat')
-  );
-
-  // Move feedback under Chat Channels
-  if (feedback && chatCategory) {
-    await feedback.setParent(chatCategory.id, { lockPermissions: false });
-    console.log(`✅  Moved #${feedback.name} → ${chatCategory.name}`);
-  } else {
-    console.warn(`⚠️  Could not move feedback — feedback:${!!feedback} chatCategory:${!!chatCategory}`);
-  }
-
-  // Lock read-only channels
-  const botId   = client.user.id;
-  const toLock  = [announcements, instructions, links].filter(Boolean);
-
-  for (const ch of toLock) {
-    // Deny @everyone from sending
-    await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
-    // Ensure bot can still send
-    await ch.permissionOverwrites.edit(botId, { SendMessages: true });
-    console.log(`🔒  Locked #${ch.name} — @everyone read-only, bot can write`);
-  }
-}
 
 // ── Bot ──────────────────────────────────────────────────────────
 if (!TOKEN) { console.error('❌  Set DISCORD_BOT_TOKEN env var'); process.exit(1); }
@@ -83,25 +42,73 @@ const client = new Client({
 const cooldowns = new Map();
 
 client.once(Events.ClientReady, async c => {
-  console.log(`✅  Logged in as ${c.user.tag}`);
-  console.log(`📊  Leveling system active — max level 30, chess roles enabled`);
+  console.log(`✅  Logged in as ${c.user.tag} (id: ${c.user.id})`);
+  console.log(`📊  Leveling system active — max level 30`);
 
-  // ── Channel setup (once) ─────────────────────────────────────
-  if (!existsSync(SETUP_FLAG)) {
-    try {
-      const guild = await client.guilds.fetch(GUILD_ID);
-      await setupChannels(guild);
-      writeFileSync(SETUP_FLAG, JSON.stringify({ done: new Date().toISOString() }));
-      console.log('✅  Channel setup complete');
-    } catch (err) {
-      console.warn('⚠️  Channel setup failed:', err.message);
-    }
+  // ── Fetch guild + all channels ───────────────────────────────
+  let guild, channels;
+  try {
+    guild    = await client.guilds.fetch(GUILD_ID);
+    channels = await guild.channels.fetch();
+    console.log(`\n📋  Channels in server (${channels.size} total):`);
+    channels.forEach(ch => {
+      if (ch) console.log(`   [${ch.type === ChannelType.GuildCategory ? 'CAT' : 'CH '}] "${ch.name}" — ${ch.id}`);
+    });
+  } catch (err) {
+    console.error('❌  Failed to fetch guild/channels:', err.message);
+    return;
   }
 
-  // ── Launch announcement (once) ───────────────────────────────
-  if (!existsSync(ANNOUNCE_FLAG)) {
-    try {
-      const ch = await client.channels.fetch(ANNOUNCE_CHANNEL);
+  // ── Channel setup: move feedback + lock info channels ────────
+  try {
+    const find = kw => channels.find(c => c && c.name.toLowerCase().includes(kw.toLowerCase()));
+
+    const feedback      = find('feedback');
+    const announcements = channels.get(ANNOUNCE_CHANNEL);   // use ID — guaranteed
+    const instructions  = find('instruction');
+    const links         = find('links');
+    const chatCategory  = channels.find(
+      c => c && c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('chat')
+    );
+
+    console.log('\n🔧  Setup targets:');
+    console.log(`   feedback:      ${feedback      ? `"${feedback.name}"` : '❌ not found'}`);
+    console.log(`   announcements: ${announcements ? `"${announcements.name}"` : '❌ not found'}`);
+    console.log(`   instructions:  ${instructions  ? `"${instructions.name}"` : '❌ not found'}`);
+    console.log(`   links:         ${links         ? `"${links.name}"` : '❌ not found'}`);
+    console.log(`   chat category: ${chatCategory  ? `"${chatCategory.name}"` : '❌ not found'}`);
+
+    // Move feedback under Chat Channels category
+    if (feedback && chatCategory) {
+      await feedback.setParent(chatCategory.id, { lockPermissions: false });
+      console.log(`✅  Moved #${feedback.name} → "${chatCategory.name}"`);
+    }
+
+    // Lock: @everyone deny SendMessages, bot allow SendMessages
+    const botId  = c.user.id;
+    const toLock = [announcements, instructions, links].filter(Boolean);
+    for (const ch of toLock) {
+      await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
+      await ch.permissionOverwrites.edit(botId, { SendMessages: true, ViewChannel: true });
+      console.log(`🔒  Locked #${ch.name}`);
+    }
+  } catch (err) {
+    console.error('❌  Channel setup error:', err.message);
+  }
+
+  // ── Launch announcement (posts once — checks existing messages) ─
+  try {
+    const announceCh = await client.channels.fetch(ANNOUNCE_CHANNEL);
+
+    // Check if bot already posted the launch announcement
+    const recent = await announceCh.messages.fetch({ limit: 20 });
+    const alreadyPosted = recent.some(
+      m => m.author.id === c.user.id && m.embeds?.[0]?.title?.includes('Nadburn is Live')
+    );
+
+    if (alreadyPosted) {
+      console.log('ℹ️   Launch announcement already in #announcements — skipping');
+    } else {
       const embed = new EmbedBuilder()
         .setColor(0xff4500)
         .setTitle('🔥 Nadburn is Live')
@@ -112,18 +119,18 @@ client.once(Events.ClientReady, async c => {
         )
         .setThumbnail('https://nadburn.xyz/favicon.svg')
         .addFields(
-          { name: '🌐 Website',   value: '[nadburn.xyz](https://nadburn.xyz)',         inline: true },
-          { name: '🚀 App',       value: '[nadburn.xyz/app](https://nadburn.xyz/app)', inline: true },
+          { name: '🌐 Website',   value: '[nadburn.xyz](https://nadburn.xyz)',          inline: true },
+          { name: '🚀 App',       value: '[nadburn.xyz/app](https://nadburn.xyz/app)',  inline: true },
           { name: '💬 Community', value: '[Join Discord](https://discord.gg/sbUnEANQ)', inline: true },
         )
         .setFooter({ text: 'nadburn.xyz • burn it all' })
         .setTimestamp();
-      await ch.send({ embeds: [embed] });
-      writeFileSync(ANNOUNCE_FLAG, JSON.stringify({ posted: new Date().toISOString() }));
+
+      await announceCh.send({ embeds: [embed] });
       console.log('📢  Launch announcement posted to #announcements');
-    } catch (err) {
-      console.warn('⚠️  Announcement failed:', err.message);
     }
+  } catch (err) {
+    console.error('❌  Announcement error:', err.message);
   }
 });
 
@@ -186,17 +193,13 @@ client.on(Events.MessageCreate, async message => {
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
   await interaction.deferReply();
-
   const { commandName } = interaction;
 
   try {
     if (commandName === 'rank') {
       const data  = loadData();
       const entry = data[interaction.user.id];
-      if (!entry || entry.level === 0) {
-        await interaction.editReply('You have no XP yet — start chatting!');
-        return;
-      }
+      if (!entry || entry.level === 0) { await interaction.editReply('You have no XP yet — start chatting!'); return; }
       const role      = roleForLevel(entry.level);
       const nextLevel = entry.level < 30 ? entry.level + 1 : null;
       const xpNeeded  = nextLevel ? xpForLevel(nextLevel) - entry.xp : 0;
@@ -205,20 +208,17 @@ client.on(Events.InteractionCreate, async interaction => {
         .setTitle(`${role?.name ?? '🎖️'} ${entry.username}`)
         .addFields(
           { name: 'Level', value: `**${entry.level}** / 30`, inline: true },
-          { name: 'XP',    value: `${entry.xp.toLocaleString()}`,          inline: true },
+          { name: 'XP',    value: `${entry.xp.toLocaleString()}`, inline: true },
           { name: nextLevel ? `XP to Level ${nextLevel}` : 'Status',
-            value: nextLevel ? `${xpNeeded.toLocaleString()} more` : '👑 Max level reached!',
-            inline: true },
+            value: nextLevel ? `${xpNeeded.toLocaleString()} more` : '👑 Max level reached!', inline: true },
         )
-        .setFooter({ text: 'nadburn.xyz • burn it all' })
-        .setTimestamp();
+        .setFooter({ text: 'nadburn.xyz • burn it all' }).setTimestamp();
       await interaction.editReply({ embeds: [embed] });
 
     } else if (commandName === 'leaderboard') {
       const data   = loadData();
       const sorted = Object.entries(data).sort(([, a], [, b]) => b.xp - a.xp).slice(0, 10);
       if (sorted.length === 0) { await interaction.editReply('No one has earned XP yet.'); return; }
-
       const medals = ['🥇', '🥈', '🥉'];
       const lines  = sorted.map(([, u], i) => {
         const role = roleForLevel(u.level);
@@ -238,8 +238,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const sym = m.embeds[0].fields?.find(f => f.name === 'Token')?.value?.trim();
         if (sym) tokenCounts[sym] = (tokenCounts[sym] || 0) + 1;
       });
-      const topTokens = Object.entries(tokenCounts)
-        .sort((a, b) => b[1] - a[1]).slice(0, 5)
+      const topTokens = Object.entries(tokenCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
         .map(([sym, n]) => `\`${sym}\` — ${n} burns`).join('\n') || 'No burns yet';
       const embed = new EmbedBuilder()
         .setColor(0xff4500).setTitle('📊 Nadburn Statistics').setURL('https://nadburn.xyz')
@@ -254,20 +253,16 @@ client.on(Events.InteractionCreate, async interaction => {
       const channel  = await client.channels.fetch(BURNS_CHANNEL);
       const messages = await channel.messages.fetch({ limit: 100 });
       const recent   = messages.filter(m => m.webhookId && m.embeds.length > 0 && m.embeds[0].title?.includes('🔥')).first(5);
-      if (!recent.length) {
-        await interaction.editReply('No burns yet. Be the first at **nadburn.xyz**!');
-        return;
-      }
+      if (!recent.length) { await interaction.editReply('No burns yet. Be the first at **nadburn.xyz**!'); return; }
       const embed = new EmbedBuilder()
         .setColor(0xff4500).setTitle('🔥 Latest Burns').setURL('https://nadburn.xyz')
         .setFooter({ text: 'nadburn.xyz • burn it all' }).setTimestamp();
       recent.forEach(m => {
-        const e   = m.embeds[0];
-        const amt = e.fields?.find(f => f.name === 'Amount')?.value;
-        const sym = e.fields?.find(f => f.name === 'Token')?.value;
-        const mode = e.fields?.find(f => f.name === 'Mode')?.value;
-        const tx  = e.fields?.find(f => f.name === 'Tx Hash')?.value;
-        embed.addFields({ name: `${sym} — ${amt}`, value: [mode, tx].filter(Boolean).join(' • ') || '—' });
+        const e = m.embeds[0];
+        embed.addFields({
+          name:  `${e.fields?.find(f => f.name === 'Token')?.value} — ${e.fields?.find(f => f.name === 'Amount')?.value}`,
+          value: [e.fields?.find(f => f.name === 'Mode')?.value, e.fields?.find(f => f.name === 'Tx Hash')?.value].filter(Boolean).join(' • ') || '—',
+        });
       });
       await interaction.editReply({ embeds: [embed] });
     }
