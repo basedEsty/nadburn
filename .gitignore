@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Environment secrets — NEVER commit
+.env
+.env.*
+!.env.example
+discord-bot/levels.json
+discord-bot/channels_setup.json
+discord-bot/announced.json
