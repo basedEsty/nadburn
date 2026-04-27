@@ -44,13 +44,19 @@ export default function PerformanceMenu() {
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
           aria-label="Performance settings"
           title="Performance"
-          className="text-white/80 hover:bg-white/10 hover:text-white"
+          className="relative h-9 w-9 shrink-0 border-violet-400/40 bg-violet-500/10 text-violet-100 hover:border-violet-300/60 hover:bg-violet-500/20 hover:text-white"
         >
-          <Gauge className="h-5 w-5" />
+          <Gauge className="h-[18px] w-[18px]" />
+          {!allOn && (
+            <span
+              aria-hidden
+              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)]"
+            />
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent
