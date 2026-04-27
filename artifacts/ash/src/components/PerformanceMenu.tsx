@@ -1,120 +1,76 @@
-import { Gauge } from "lucide-react";
-import { Button } from "./ui/button";
+import { Zap, Gauge, Battery } from "lucide-react";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "./ui/popover";
-import { Switch } from "./ui/switch";
-import {
-  setAnimationPref,
+  getPerformanceLevel,
+  setPerformanceLevel,
   useAnimationPrefs,
-  type AnimationPrefs,
+  type PerformanceLevel,
 } from "@/lib/animation-prefs";
 
-type ToggleRow = {
-  key: keyof AnimationPrefs;
+type Step = {
+  level: PerformanceLevel;
   label: string;
+  short: string;
   hint: string;
+  Icon: typeof Zap;
 };
 
-const ROWS: ToggleRow[] = [
+const STEPS: Step[] = [
   {
-    key: "background",
-    label: "Background animation",
-    hint: "Constellation, embers and aurora orbs",
+    level: "high",
+    label: "High",
+    short: "Hi",
+    hint: "All animations on",
+    Icon: Zap,
   },
   {
-    key: "cursor",
-    label: "Custom cursor",
-    hint: "Glowing arrow that follows your mouse",
+    level: "medium",
+    label: "Medium",
+    short: "Md",
+    hint: "Lighter — background paused",
+    Icon: Gauge,
   },
   {
-    key: "effects",
-    label: "Decorative effects",
-    hint: "Flickering flames around buttons and titles",
+    level: "low",
+    label: "Low",
+    short: "Lo",
+    hint: "Static — best for slow devices",
+    Icon: Battery,
   },
 ];
 
 export default function PerformanceMenu() {
   const prefs = useAnimationPrefs();
-  const allOn = prefs.background && prefs.cursor && prefs.effects;
+  const active = getPerformanceLevel(prefs);
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Performance settings"
-          title="Performance"
-          className="relative h-9 w-9 shrink-0 border-violet-400/40 bg-violet-500/10 text-violet-100 hover:border-violet-300/60 hover:bg-violet-500/20 hover:text-white"
-        >
-          <Gauge className="h-[18px] w-[18px]" />
-          {!allOn && (
-            <span
-              aria-hidden
-              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)]"
-            />
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-72 border border-white/10 bg-zinc-950/95 p-4 text-white backdrop-blur-xl"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold">Performance</p>
-            <p className="text-xs text-white/60">
-              Disable animations on slower devices.
-            </p>
-          </div>
-          <span
-            className={`mt-1 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${
-              allOn
-                ? "bg-violet-500/15 text-violet-300"
-                : "bg-amber-500/15 text-amber-300"
+    <div
+      role="radiogroup"
+      aria-label="Animation performance"
+      className="inline-flex items-center rounded-full border border-violet-400/30 bg-zinc-900/80 p-0.5 shadow-[0_0_0_1px_rgba(167,139,250,0.08),0_4px_18px_-8px_rgba(167,139,250,0.4)] backdrop-blur"
+    >
+      {STEPS.map((step) => {
+        const isActive = active === step.level;
+        const Icon = step.Icon;
+        return (
+          <button
+            key={step.level}
+            type="button"
+            role="radio"
+            aria-checked={isActive}
+            aria-label={`${step.label} — ${step.hint}`}
+            title={`${step.label} · ${step.hint}`}
+            onClick={() => setPerformanceLevel(step.level)}
+            className={`group relative inline-flex items-center justify-center gap-1 rounded-full p-1.5 text-[11px] font-semibold uppercase tracking-wider transition-all sm:px-2.5 sm:py-1.5 sm:text-xs ${
+              isActive
+                ? "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-[0_2px_10px_rgba(168,85,247,0.55)]"
+                : "text-white/55 hover:text-white"
             }`}
           >
-            {allOn ? "Full" : "Light"}
-          </span>
-        </div>
-        <div className="mt-4 space-y-3">
-          {ROWS.map((row) => {
-            const labelId = `pm-${row.key}-label`;
-            const hintId = `pm-${row.key}-hint`;
-            return (
-              <div
-                key={row.key}
-                className="flex items-start justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5 transition-colors hover:bg-white/[0.05]"
-              >
-                <div className="min-w-0">
-                  <p
-                    id={labelId}
-                    className="text-sm font-medium leading-tight text-white"
-                  >
-                    {row.label}
-                  </p>
-                  <p id={hintId} className="mt-0.5 text-xs text-white/50">
-                    {row.hint}
-                  </p>
-                </div>
-                <Switch
-                  checked={prefs[row.key]}
-                  onCheckedChange={(v) => setAnimationPref(row.key, v)}
-                  aria-labelledby={labelId}
-                  aria-describedby={hintId}
-                />
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-3 text-[11px] leading-snug text-white/40">
-          Saved on this device. Disabling them all keeps the same look but
-          stops every running animation.
-        </p>
-      </PopoverContent>
-    </Popover>
+            <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">{step.short}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

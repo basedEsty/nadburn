@@ -56,6 +56,56 @@ export function setAnimationPref<K extends keyof AnimationPrefs>(
   value: AnimationPrefs[K],
 ) {
   current = { ...current, [key]: value };
+  persistAndEmit();
+}
+
+// ---- Preset levels ------------------------------------------------------
+//
+// The Navbar exposes three escalating performance presets so the user can
+// dial things back without thinking about which individual animation costs
+// what. The mapping is calibrated by relative perf cost on weak hardware:
+//
+//   high   — everything on (default)
+//   medium — drop the canvas (the biggest CPU/GPU hog) but keep the
+//            cursor and the small framer-motion accents
+//   low    — drop everything; the page is fully static
+//
+export type PerformanceLevel = "high" | "medium" | "low";
+
+const LEVEL_PRESETS: Record<PerformanceLevel, AnimationPrefs> = {
+  high: { background: true, cursor: true, effects: true },
+  medium: { background: false, cursor: true, effects: true },
+  low: { background: false, cursor: false, effects: false },
+};
+
+export function getPerformanceLevel(prefs: AnimationPrefs): PerformanceLevel {
+  // Match against the three presets in order. If the persisted prefs don't
+  // match any preset exactly (older "custom" combos from prior versions),
+  // fall back based on whether the heaviest piece — the background — is
+  // running, so the highlighted segment still reflects perceived load.
+  for (const [level, p] of Object.entries(LEVEL_PRESETS) as [
+    PerformanceLevel,
+    AnimationPrefs,
+  ][]) {
+    if (
+      p.background === prefs.background &&
+      p.cursor === prefs.cursor &&
+      p.effects === prefs.effects
+    ) {
+      return level;
+    }
+  }
+  if (prefs.background) return "high";
+  if (prefs.effects || prefs.cursor) return "medium";
+  return "low";
+}
+
+export function setPerformanceLevel(level: PerformanceLevel) {
+  current = { ...LEVEL_PRESETS[level] };
+  persistAndEmit();
+}
+
+function persistAndEmit() {
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
