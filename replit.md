@@ -28,24 +28,49 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ## NadBurn — Web3 dust burner
 
-### Vercel deployment (frontend on nadburn.xyz)
+### Split deploy: frontend on Vercel, api-server on Replit
+
+The frontend (`artifacts/ash`) deploys to Vercel at `nadburn.xyz`. The
+api-server (`artifacts/api-server`) keeps living on Replit Deployments
+because it holds paid-API secrets (`UNISWAP_TRADING_API_KEY`,
+`BLOCKVISION_API_KEY`, `SESSION_SECRET`).
 
 `artifacts/ash/vercel.json` ships a SPA rewrite so client-side routes
 (`/app`, `/some-other-route`) fall through to `index.html` instead of
 returning Vercel's default 404. Set the Vercel project **Root Directory**
-to `artifacts/ash` so this config is picked up.
+to `artifacts/ash`. The rewrite excludes `/api/*` so it doesn't shadow
+API calls.
 
-The rewrite excludes `/api/*` so it doesn't shadow API calls. Since the
-Express api-server isn't on Vercel, you'll need one of:
-- A Vercel rewrite proxying `/api/(.*)` to the deployed api-server URL
-  (add a rule like `{ "source": "/api/(.*)", "destination": "https://your-api-server.replit.app/api/$1" }`
-  to `vercel.json`), **or**
-- Deploy the api-server elsewhere (Replit Deployments, Fly, Railway) and
-  point a `VITE_API_URL` env var at it for absolute API URLs.
+**Two env vars wire the two deploys together:**
 
-The api-server's CSRF/CORS allowlist accepts origins from
-`PUBLIC_APP_DOMAIN` — set it to `https://nadburn.xyz` in the api-server
-env so cross-origin requests from Vercel are accepted.
+1. On the **Vercel** project, set
+   `VITE_API_BASE_URL="https://<your-replit-deploy>.replit.app"`. The
+   frontend resolves every `/api/*` call through `lib/api-base.ts ->
+   apiUrl()`, which prepends this. Without it, relative calls land on
+   Vercel's SPA and return Vercel's "NOT_FOUND iad1::…" 404 page.
+2. On the **Replit api-server** deploy, set
+   `PUBLIC_APP_DOMAIN="nadburn.xyz"`. This single var does three things:
+   - Adds `https://nadburn.xyz` to the CORS + CSRF allowlist
+     (`src/app.ts:15-106`), so browser requests aren't rejected with
+     `Origin not allowed`.
+   - Flips the session cookie from `SameSite=Strict` to `SameSite=None;
+     Secure` (`src/routes/auth.ts:setSessionCookie`) so the cookie
+     actually rides on cross-site fetches from Vercel — Strict drops
+     them entirely. CSRF protection still holds because every POST is
+     Origin-checked against the allowlist.
+   - Tells the OIDC `/login` and `/logout` flows to redirect users back
+     to the frontend origin after the round-trip, instead of landing
+     them on the api-server's own host (which has no SPA).
+
+In the Replit dev preview leave both vars unset — the local shared proxy
+on port 80 routes `/api/*` to the api-server, absolute URLs would only
+add a redundant network hop, and the session cookie stays Strict.
+
+Always keep frontend `/api/*` calls behind `apiUrl()` (never inline
+`fetch("/api/foo")`) so a future endpoint doesn't quietly bypass the base
+URL and re-introduce the Vercel-404 bug. The auth client in
+`lib/replit-auth-web/src/use-auth.ts` follows the same pattern via its
+own `authUrl()` helper.
 
 ### Architecture
 

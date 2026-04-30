@@ -45,6 +45,7 @@ import { BurnProgress, type ProgressStep } from "@/components/BurnProgress";
 import HistoryPanel from "@/components/HistoryPanel";
 import { ConfirmBurnDialog, type ConfirmTokenLine } from "@/components/ConfirmBurnDialog";
 import { api } from "@/lib/api";
+import { apiUrl } from "@/lib/api-base";
 
 interface TokenBalance {
   address: `0x${string}` | "native";
@@ -91,7 +92,7 @@ async function fetchWalletTokenAddresses(
 ): Promise<WalletTokenScan> {
   try {
     const res = await fetch(
-      `/api/explorer/tokens?chainId=${chainId}&address=${address}`,
+      apiUrl(`/api/explorer/tokens?chainId=${chainId}&address=${address}`),
       { credentials: "include" },
     );
     if (!res.ok) return { addresses: [] };

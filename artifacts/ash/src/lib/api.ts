@@ -1,3 +1,5 @@
+import { apiUrl } from "./api-base";
+
 export type BurnHistoryItem = {
   id: string;
   chainId: number;
@@ -21,8 +23,11 @@ export type SavedTokenItem = {
   createdAt: string;
 };
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // `path` is always a server route like "/api/burn-history". We resolve it
+  // through apiUrl() so production builds (Vercel) hit the absolute Replit
+  // api-server URL instead of Vercel's own 404 page.
+  const res = await fetch(apiUrl(path), {
     credentials: "include",
     headers: { "content-type": "application/json", ...(init?.headers || {}) },
     ...init,

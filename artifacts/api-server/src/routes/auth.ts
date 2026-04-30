@@ -30,20 +30,43 @@ function getOrigin(req: Request): string {
   return `${proto}://${host}`;
 }
 
+// When the frontend lives on a different origin than the api-server (Vercel
+// frontend + Replit api-server), the session cookie has to be sent on
+// cross-site fetches from the frontend. SameSite=Strict blocks that
+// completely, so we drop to SameSite=None in cross-origin deploys.
+// CSRF protection still holds because `app.ts` rejects any POST whose Origin
+// is not in the allowlist (built from PUBLIC_APP_DOMAIN, REPLIT_DOMAINS,
+// REPLIT_DEV_DOMAIN). PUBLIC_APP_DOMAIN being set is the signal that we are
+// running in cross-origin mode.
+function isCrossOriginDeploy(): boolean {
+  return !!process.env.PUBLIC_APP_DOMAIN;
+}
+
+function getAllowedFrontendOrigins(): string[] {
+  const raw = process.env.PUBLIC_APP_DOMAIN ?? "";
+  return raw
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .map((d) => `https://${d}`);
+}
+
 function setSessionCookie(res: Response, sid: string) {
+  const crossOrigin = isCrossOriginDeploy();
   res.cookie(SESSION_COOKIE, sid, {
     httpOnly: true,
     secure: true,
-    // "strict" prevents the session cookie from being attached to any request
-    // that originates from a different site, including cross-tenant *.replit.app
-    // origins that share the same registrable domain as this app.
-    sameSite: "strict",
+    sameSite: crossOrigin ? "none" : "strict",
     path: "/",
     maxAge: SESSION_TTL,
   });
 }
 
 function setOidcCookie(res: Response, name: string, value: string) {
+  // OIDC handshake cookies are written during /login and read during
+  // /callback — both happen on the api-server origin via top-level
+  // navigation, so SameSite=Lax is sufficient even in cross-origin deploys
+  // (the user actually navigates here from the OIDC provider, not via XHR).
   res.cookie(name, value, {
     httpOnly: true,
     secure: true,
@@ -53,11 +76,21 @@ function setOidcCookie(res: Response, name: string, value: string) {
   });
 }
 
+// `returnTo` may be either a same-origin path ("/app") or — when the
+// frontend lives on another origin — a fully-qualified URL whose origin is
+// in the frontend allowlist. Anything else falls back to "/" to avoid
+// open-redirect bugs.
 function getSafeReturnTo(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
+  if (typeof value !== "string") return "/";
+  if (value.startsWith("/") && !value.startsWith("//")) return value;
+  try {
+    const parsed = new URL(value);
+    const allowed = getAllowedFrontendOrigins();
+    if (allowed.includes(parsed.origin)) return parsed.toString();
+  } catch {
+    // not a valid URL → fall through
   }
-  return value;
+  return "/";
 }
 
 async function upsertUser(claims: Record<string, unknown>) {
@@ -192,14 +225,23 @@ router.get("/callback", async (req: Request, res: Response) => {
 
 router.get("/logout", async (req: Request, res: Response) => {
   const config = await getOidcConfig();
-  const origin = getOrigin(req);
+  // After OIDC ends the session, the user should land back on the frontend,
+  // not on the api-server origin (which has no SPA to render). When the
+  // frontend lives on another origin, prefer the validated `returnTo` (or
+  // the first allowed PUBLIC_APP_DOMAIN as a sensible default).
+  const allowed = getAllowedFrontendOrigins();
+  const requested = getSafeReturnTo(req.query.returnTo);
+  const postLogoutRedirect =
+    requested !== "/"
+      ? requested
+      : allowed[0] ?? getOrigin(req);
 
   const sid = getSessionId(req);
   await clearSession(res, sid);
 
   const endSessionUrl = oidc.buildEndSessionUrl(config, {
     client_id: process.env.REPL_ID!,
-    post_logout_redirect_uri: origin,
+    post_logout_redirect_uri: postLogoutRedirect,
   });
 
   res.redirect(endSessionUrl.href);

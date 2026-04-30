@@ -3,6 +3,8 @@
 // `x-permit2-disabled: true`, so the swap flow here is plain
 // approve-then-swap with no Permit2 signatures required.
 
+import { apiUrl } from "./api-base";
+
 export type TradingApiError = {
   error: string;
   code?: string;
@@ -79,13 +81,11 @@ export type SwapResponse = {
   requestId?: string;
 };
 
-const PROXY_BASE = "/api/uniswap";
-
 async function postProxy<TIn extends object, TOut>(
   endpoint: string,
   body: TIn,
 ): Promise<TOut> {
-  const r = await fetch(`${PROXY_BASE}/${endpoint}`, {
+  const r = await fetch(apiUrl(`/api/uniswap/${endpoint}`), {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "include",
