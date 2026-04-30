@@ -65,6 +65,13 @@ router.post("/uniswap/:endpoint", async (req: Request, res: Response) => {
         accept: "application/json",
         "x-api-key": apiKey,
         "x-permit2-disabled": "true",
+        // The Trading API rejects requests that don't carry an Origin header
+        // with `{"error":"Missing Origin header"}`, which the frontend
+        // surfaces as "no route found". Browsers can't set Origin manually
+        // and our server-to-server fetch drops it by default, so we forge a
+        // sensible one here. Using the Uniswap web app's own origin keeps
+        // us in their allowlist regardless of where this proxy is deployed.
+        origin: process.env.UNISWAP_TRADING_API_ORIGIN || "https://app.uniswap.org",
       },
       body: bodyText,
       signal: controller.signal,
